@@ -12,3 +12,6 @@ dist
 *.swp
 *.swo
 
+.vscode/
+.codegpt
+.DS_Store
