@@ -67,9 +67,6 @@ echo "The Linux image is located at: /work/buildroot-2018.08.4/output/images/"\n
 # ビルドスクリプトを実行してbuildrootをビルド
 RUN /work/build.sh
 
-# ビルド結果を保存するディレクトリを作成
-VOLUME ["/work/buildroot-2018.08.4/output"]
-
 # エントリポイントスクリプトを作成
 RUN echo '#!/bin/bash\n\
 \n\
