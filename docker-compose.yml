@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  sc1000-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Automatically detect platform or override with PLATFORM env var
+        PLATFORM: ${PLATFORM:-linux/arm64}
+    container_name: sc1000-dev
+    volumes:
+      # Mount source code
+      - .:/work/SC1000
+      # Mount persistent buildroot output directory
+      - buildroot-output:/work/buildroot-output
+      # Optional: Mount additional cache directories for faster builds
+      - buildroot-dl:/work/buildroot-2018.08.4/dl
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+      - TZ=Asia/Tokyo
+      - FORCE_UNSAFE_CONFIGURE=1
+    stdin_open: true
+    tty: true
+    # Default command - can be overridden
+    command: ["help"]
+
+  # Service for interactive development
+  sc1000-shell:
+    extends: sc1000-dev
+    command: ["shell"]
+    container_name: sc1000-shell
+
+volumes:
+  # Persistent volume for buildroot output (toolchain, OS images, etc.)
+  buildroot-output:
+    driver: local
+  # Persistent volume for buildroot download cache
+  buildroot-dl:
+    driver: local 

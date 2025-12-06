@@ -1,81 +1,217 @@
-FROM --platform=linux/arm64 ubuntu:20.04
+# SC1000 Development Environment - Multi-stage build support
+# Note: PLATFORM specifies the HOST platform (where Docker runs), not the TARGET.
+# The TARGET is ARM32 (ARMv7-A Cortex-A8) as configured in buildroot_config.
+# Use linux/arm64 for Apple Silicon Macs, linux/amd64 for Intel Macs/x86_64.
+ARG PLATFORM=linux/arm64
+FROM --platform=${PLATFORM} ubuntu:20.04
 
-# タイムゾーンの設定（インタラクティブなプロンプトを避けるため）
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Tokyo
-ENV FORCE_UNSAFE_CONFIGURE=1
+# Environment variable configuration
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Tokyo \
+    FORCE_UNSAFE_CONFIGURE=1 \
+    BUILDROOT_OUTPUT_DIR=/work/buildroot-output \
+    CC_ARM=/work/buildroot-output/host/usr/bin/arm-linux-gcc
 
-# 必要なパッケージをインストール
+# Install required packages in bulk
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    wget \
-    cpio \
-    unzip \
-    rsync \
-    bc \
-    python \
-    python3 \
-    file \
-    libncurses5-dev \
-    libssl-dev \
-    libelf-dev \
-    bison \
-    flex \
-    patch \
-    gawk \
-    cmake \
-    make \
-    gcc \
-    g++ \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential git wget cpio unzip rsync bc \
+    python python3 file libncurses5-dev libssl-dev \
+    libelf-dev bison flex patch gawk cmake make gcc g++ \
+    libasound2-dev pkg-config \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 作業ディレクトリを作成
 WORKDIR /work
 
-# buildrootをダウンロード
-RUN wget https://buildroot.org/downloads/buildroot-2018.08.4.tar.gz \
+# Prepare buildroot (download only)
+RUN wget -q https://buildroot.org/downloads/buildroot-2018.08.4.tar.gz \
     && tar -xzf buildroot-2018.08.4.tar.gz \
     && rm buildroot-2018.08.4.tar.gz
 
-# SC1000のソースコードをコピー（ビルド時に必要なファイルのみ）
-COPY os/buildroot/buildroot_config /work/SC1000/os/buildroot/buildroot_config
-COPY os/buildroot/sc1000overlay /work/SC1000/os/buildroot/sc1000overlay
+# Create directories for persistent buildroot output and download cache
+RUN mkdir -p /work/buildroot-output /work/buildroot-2018.08.4/dl
 
-# ビルドスクリプトを作成
+# Create integrated script
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
-# buildrootの設定\n\
-cd /work/buildroot-2018.08.4\n\
-cp /work/SC1000/os/buildroot/buildroot_config .config\n\
+BUILDROOT_DIR="/work/buildroot-2018.08.4"\n\
+SC1000_DIR="/work/SC1000"\n\
+BUILDROOT_OUTPUT_DIR="/work/buildroot-output"\n\
 \n\
-# オーバーレイディレクトリのシンボリックリンクを作成\n\
-if [ ! -e /work/buildroot-2018.08.4/sc1000overlay ]; then\n\
-  ln -sf /work/SC1000/os/buildroot/sc1000overlay /work/buildroot-2018.08.4/sc1000overlay\n\
-fi\n\
+show_usage() {\n\
+    echo "SC1000 Build Tool (with persistent buildroot output)"\n\
+    echo "Usage: $0 [COMMAND]"\n\
+    echo "Commands:"\n\
+    echo "  os       - Build Linux OS image (buildroot)"\n\
+    echo "  toolchain - Build ARM cross-compiler only"\n\
+    echo "  software - Build xwax software (ARM)"\n\
+    echo "  native   - Build xwax native (x86/ARM64 for testing)"\n\
+    echo "  updater  - Create updater package"\n\
+    echo "  all      - Build everything (os + software + updater)"\n\
+    echo "  clean    - Clean build artifacts (except persistent cache)"\n\
+    echo "  clean-all - Clean everything including persistent cache"\n\
+    echo "  shell    - Start interactive shell"\n\
+    echo "  info     - Show build information"\n\
+}\n\
 \n\
-# buildrootをビルド\n\
-echo "Building buildroot (this may take a while)..."\n\
-make -j$(nproc)\n\
+show_info() {\n\
+    echo "=== SC1000 Build Information ==="\n\
+    echo "Buildroot directory: $BUILDROOT_DIR"\n\
+    echo "Persistent output: $BUILDROOT_OUTPUT_DIR"\n\
+    echo "Cross-compiler: $CC_ARM"\n\
+    echo ""\n\
+    if [ -f "$CC_ARM" ]; then\n\
+        echo "Toolchain status: Available ($($CC_ARM --version | head -1))"\n\
+    else\n\
+        echo "Toolchain status: Not built yet"\n\
+    fi\n\
+    \n\
+    if [ -d "$BUILDROOT_OUTPUT_DIR/images" ]; then\n\
+        echo "OS images: Available"\n\
+        ls -la "$BUILDROOT_OUTPUT_DIR/images/" | grep -E "\\.img|\\.tar|\\.dtb|zImage" || true\n\
+    else\n\
+        echo "OS images: Not built yet"\n\
+    fi\n\
+    \n\
+    if [ -f "$SC1000_DIR/software/xwax" ]; then\n\
+        echo "xwax software: Available"\n\
+    else\n\
+        echo "xwax software: Not built yet"\n\
+    fi\n\
+}\n\
 \n\
-echo "Build completed successfully!"\n\
-echo "The Linux image is located at: /work/buildroot-2018.08.4/output/images/"\n\
-' > /work/build.sh && chmod +x /work/build.sh
+build_os() {\n\
+    echo "=== Building SC1000 OS ==="\n\
+    cd "$BUILDROOT_DIR"\n\
+    \n\
+    # Ensure persistent output directory exists\n\
+    mkdir -p "$BUILDROOT_OUTPUT_DIR"\n\
+    \n\
+    # For O= option, config file must be in output directory\n\
+    cp "$SC1000_DIR/os/buildroot/buildroot_config" "$BUILDROOT_OUTPUT_DIR/.config"\n\
+    \n\
+    # Create overlay link in buildroot source directory\n\
+    [ ! -e sc1000overlay ] && ln -sf "$SC1000_DIR/os/buildroot/sc1000overlay" sc1000overlay\n\
+    \n\
+    # Verify config file exists in output directory\n\
+    if [ ! -f "$BUILDROOT_OUTPUT_DIR/.config" ]; then\n\
+        echo "Error: .config file not found in $BUILDROOT_OUTPUT_DIR"\n\
+        exit 1\n\
+    fi\n\
+    \n\
+    echo "Building buildroot (output will be persisted)..."\n\
+    echo "This may take 1+ hours on first build, but will be faster on subsequent builds."\n\
+    echo "Config file: $(ls -la $BUILDROOT_OUTPUT_DIR/.config)"\n\
+    echo "Output directory: $BUILDROOT_OUTPUT_DIR"\n\
+    \n\
+    # Use O= option to specify output directory explicitly\n\
+    make O="$BUILDROOT_OUTPUT_DIR" -j$(nproc)\n\
+    echo "OS build completed: $BUILDROOT_OUTPUT_DIR/images/"\n\
+}\n\
+\n\
+build_software() {\n\
+    echo "=== Building SC1000 Software ==="\n\
+    if [ ! -f "$CC_ARM" ]; then\n\
+        echo "Cross-compiler not found. Building toolchain..."\n\
+        build_toolchain_only\n\
+    fi\n\
+    \n\
+    cd "$SC1000_DIR/software"\n\
+    make clean || true\n\
+    echo "Using cross-compiler: $CC_ARM"\n\
+    make CC="$CC_ARM"\n\
+    echo "Software build completed: $SC1000_DIR/software/xwax"\n\
+}\n\
+\n\
+build_toolchain_only() {\n\
+    echo "=== Building ARM Toolchain Only ==="\n\
+    cd "$BUILDROOT_DIR"\n\
+    \n\
+    # Ensure persistent output directory exists\n\
+    mkdir -p "$BUILDROOT_OUTPUT_DIR"\n\
+    \n\
+    # For O= option, config file must be in output directory\n\
+    cp "$SC1000_DIR/os/buildroot/buildroot_config" "$BUILDROOT_OUTPUT_DIR/.config"\n\
+    \n\
+    # Create overlay link in buildroot source directory\n\
+    [ ! -e sc1000overlay ] && ln -sf "$SC1000_DIR/os/buildroot/sc1000overlay" sc1000overlay\n\
+    \n\
+    # Verify config file exists in output directory\n\
+    if [ ! -f "$BUILDROOT_OUTPUT_DIR/.config" ]; then\n\
+        echo "Error: .config file not found in $BUILDROOT_OUTPUT_DIR"\n\
+        exit 1\n\
+    fi\n\
+    \n\
+    echo "Building ARM cross-compiler (output will be persisted)..."\n\
+    echo "This may take 20-30 minutes on first build, but will be instant on subsequent builds if cached."\n\
+    echo "Config file: $(ls -la $BUILDROOT_OUTPUT_DIR/.config)"\n\
+    echo "Output directory: $BUILDROOT_OUTPUT_DIR"\n\
+    \n\
+    # Use O= option to specify output directory explicitly\n\
+    make O="$BUILDROOT_OUTPUT_DIR" toolchain -j$(nproc)\n\
+    echo "Toolchain build completed: $CC_ARM"\n\
+}\n\
+\n\
+build_updater() {\n\
+    echo "=== Building SC1000 Updater ==="\n\
+    if [ ! -f "$SC1000_DIR/software/xwax" ]; then\n\
+        echo "Error: xwax binary not found. Build software first."\n\
+        exit 1\n\
+    fi\n\
+    \n\
+    # Create tarball directory if it does not exist\n\
+    mkdir -p "$SC1000_DIR/updater/tarball"\n\
+    \n\
+    cd "$SC1000_DIR/updater"\n\
+    ./buildupdater.sh\n\
+    echo "Updater package created: $SC1000_DIR/updater/sc.tar"\n\
+}\n\
+\n\
+clean_build() {\n\
+    echo "=== Cleaning Build Artifacts (keeping persistent cache) ==="\n\
+    [ -f "$SC1000_DIR/software/xwax" ] && cd "$SC1000_DIR/software" && make clean\n\
+    [ -f "$SC1000_DIR/updater/sc.tar" ] && rm -f "$SC1000_DIR/updater/sc.tar"\n\
+    echo "Clean completed (buildroot cache preserved)"\n\
+}\n\
+\n\
+clean_all() {\n\
+    echo "=== Cleaning All Build Artifacts INCLUDING persistent cache ==="\n\
+    [ -d "$BUILDROOT_OUTPUT_DIR" ] && rm -rf "$BUILDROOT_OUTPUT_DIR"/*\n\
+    [ -f "$SC1000_DIR/software/xwax" ] && cd "$SC1000_DIR/software" && make clean\n\
+    [ -f "$SC1000_DIR/updater/sc.tar" ] && rm -f "$SC1000_DIR/updater/sc.tar"\n\
+    # Remove symlink if it exists\n\
+    [ -L "$BUILDROOT_DIR/output" ] && rm -f "$BUILDROOT_DIR/output"\n\
+    echo "Complete clean finished (all caches removed)"\n\
+}\n\
+\n\
+build_native() {\n\
+    echo "=== Building SC1000 Software (Native) ==="\n\
+    cd "$SC1000_DIR/software"\n\
+    make clean || true\n\
+    \n\
+    # Cross-compiler not needed for native build\n\
+    echo "Building xwax for native platform (for testing)..."\n\
+    make CC=gcc\n\
+    echo "Native build completed: $SC1000_DIR/software/xwax"\n\
+}\n\
+\n\
+case "${1:-help}" in\n\
+    os) build_os ;;\n\
+    toolchain) build_toolchain_only ;;\n\
+    software) build_software ;;\n\
+    native) build_native ;;\n\
+    updater) build_updater ;;\n\
+    all) build_os && build_software && build_updater ;;\n\
+    clean) clean_build ;;\n\
+    clean-all) clean_all ;;\n\
+    info) show_info ;;\n\
+    shell) exec /bin/bash ;;\n\
+    help|--help|-h|"") show_usage ;;\n\
+    *) show_usage; exit 1 ;;\n\
+esac\n\
+' > /work/sc1000-build.sh
 
-# ビルドスクリプトを実行してbuildrootをビルド
-RUN /work/build.sh
+RUN chmod +x /work/sc1000-build.sh
 
-# エントリポイントスクリプトを作成
-RUN echo '#!/bin/bash\n\
-\n\
-if [ "$1" = "build" ]; then\n\
-    exec /work/build.sh\n\
-else\n\
-    exec "$@"\n\
-fi\n\
-' > /work/entrypoint.sh && chmod +x /work/entrypoint.sh
-
-ENTRYPOINT ["/work/entrypoint.sh"]
-CMD ["/bin/bash"]
+ENTRYPOINT ["/work/sc1000-build.sh"]
+CMD []

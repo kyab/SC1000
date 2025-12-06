@@ -15,15 +15,16 @@
 # MA 02110-1301, USA.
 #
 
-CC=/root/buildroot-2018.08.4/output/host/usr/bin/arm-linux-gcc
-#CC=gcc -g
+CC ?= gcc
 # Libraries and dependencies
 
 INSTALL ?= install
 
-SDL_CFLAGS ?= `sdl-config --cflags`
-SDL_LIBS ?= -L/root/buildroot-2018.08/output/host/lib -L/root/buildroot-2018.08/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib -Wl,-rpath,/root/buildroot-2018.08/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib 
-SDL_LIBS ?= -lpthread -liconv
+# SDL is not actually used in SC1000, comment out for now
+#SDL_CFLAGS ?= `sdl-config --cflags`
+#SDL_LIBS ?= -lpthread -liconv
+SDL_CFLAGS ?= 
+SDL_LIBS ?= -lpthread
 
 ALSA_LIBS ?= -lasound
 

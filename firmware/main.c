@@ -131,8 +131,9 @@ void main(void) {
 
     RC0 = 1;
 
-    ANSEL = 0b10000000; //AN7/RC3 is analog
-    ANSELH = 0b00000001; //AN8/RC6 is analog
+    // 修正: RC1(AN5), RC2(AN6), RC3(AN7), RC6(AN8)をアナログピンとして設定
+    ANSEL = 0b11100000;   // AN5/RC1, AN6/RC2, AN7/RC3 をアナログに設定
+    ANSELH = 0b00000001;  // AN8/RC6 をアナログに設定
 
     /* 16Tosc conversion clock, 6Tad acquisition time, ADC Result Right Justified */
     ADCON2 = 0b10011101;

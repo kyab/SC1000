@@ -285,6 +285,8 @@ int main(int argc, char *argv[])
 
 	int rate;
 
+	printf("XWAX Koji custom starting....\n");
+
 	if (signal(SIGINT, sig_handler) == SIG_ERR)
 	{
 		printf("\ncan't catch SIGINT\n");

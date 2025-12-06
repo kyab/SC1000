@@ -506,18 +506,22 @@ void process_pic()
 	fadertarget1 = deck[1].player.setVolume;
 	
 
-	if (ADCs[0] < faderCutPoint1)
-	{ 
-		if (scsettings.cutbeats == 1) fadertarget0 = 0.0;
-		else fadertarget1 = 0.0;
-		faderOpen1 = 0;
+	if ((ADCs)[0] > 0.9){
+		fadertarget1 = 0.0;
 	}
-	if (ADCs[1] < faderCutPoint2)
-	{
-		if (scsettings.cutbeats == 2) fadertarget0 = 0.0;
-		else fadertarget1 = 0.0;
-		faderOpen2 = 0;
-	}
+
+	// if (ADCs[0] < faderCutPoint1)
+	// { 
+	// 	if (scsettings.cutbeats == 1) fadertarget0 = 0.0;
+	// 	else fadertarget1 = 0.0;
+	// 	faderOpen1 = 0;
+	// }
+	// if (ADCs[1] < faderCutPoint2)
+	// {
+	// 	if (scsettings.cutbeats == 2) fadertarget0 = 0.0;
+	// 	else fadertarget1 = 0.0;
+	// 	faderOpen2 = 0;
+	// }
 
 	deck[0].player.faderTarget = fadertarget0;
 	deck[1].player.faderTarget = fadertarget1; 

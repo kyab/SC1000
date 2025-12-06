@@ -1,148 +1,90 @@
-# SC1000 Linuxイメージビルド用Docker環境
+# SC1000 Docker Development Environment
 
-このDockerfileは、SC1000のLinuxイメージをビルドするための環境を提供します。buildroot 2018.08.4を使用して、ARM向けのLinuxイメージを構築します。
+Integrated Docker environment for SC1000 development and building. Enables efficient development with optimized multi-stage builds.
 
-## 前提条件
-
-- Docker がインストールされていること
-- macOS（M1/M2/M3チップ対応）、Linux、またはWindows環境
-
-## M1/M2/M3 Mac（Apple Silicon）での注意点
-
-このDockerfileは、Apple Silicon（ARM64アーキテクチャ）上で動作するように設定されています。`--platform=linux/arm64`フラグを使用して、ARM64向けのUbuntuイメージを使用しています。
-
-これにより、M1/M2/M3 Mac上でのパフォーマンスが向上し、Rosetta 2による変換が不要になります。
-
-Intel Mac（x86_64アーキテクチャ）を使用している場合は、Dockerfileの最初の行を以下のように変更してください：
-
-```
-FROM ubuntu:20.04
-```
-
-## Dockerイメージのビルド
-
-以下のコマンドを実行して、Dockerイメージをビルドします：
+## Quick Start
 
 ```bash
-docker build -t sc1000-buildroot .
+# 1. Build image
+docker build -t sc1000-dev .
+
+# 2. Start development environment
+docker run -it --rm -v $(pwd):/work/SC1000 sc1000-dev
+
+# 3. Or execute build directly
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev all
 ```
 
-## Dockerコンテナの実行
+## Platform Support
 
-### 対話モードでの実行
-
-以下のコマンドを実行して、対話モードでDockerコンテナを起動します：
-
+**Apple Silicon (M1/M2/M3)**:
 ```bash
-docker run -it --rm -v $(pwd):/work/SC1000 sc1000-buildroot
+docker build -t sc1000-dev .  # Automatic ARM64 support
 ```
 
-このコマンドは、現在のディレクトリ（SC1000プロジェクトのルートディレクトリ）を、コンテナ内の `/work/SC1000` にマウントします。
-
-### 自動ビルドの実行
-
-以下のコマンドを実行して、自動的にbuildroot環境の構築とLinuxイメージのビルドを行います：
-
+**Intel Mac/x86_64**:
 ```bash
-docker run -it --rm -v $(pwd):/work/SC1000 sc1000-buildroot build
+docker build --build-arg PLATFORM=linux/amd64 -t sc1000-dev .
 ```
 
-## 手動でのビルド手順
+## Build Commands
 
-Dockerコンテナ内で以下の手順を実行することで、手動でビルドを行うこともできます：
-
+### Integrated Build Tool
 ```bash
-cd /work/buildroot-2018.08.4
-cp /work/SC1000/os/buildroot/buildroot_config .config
-make -j$(nproc)
+# Build everything (OS + Software + Updater)
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev all
+
+# Individual builds
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev os        # Linux image
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev software  # xwax software
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev updater   # Updater package
+
+# Clean build
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev clean
 ```
 
-## ビルド結果
-
-ビルドが成功すると、Linuxイメージが以下の場所に生成されます：
-
-```
-/work/buildroot-2018.08.4/output/images/
-```
-
-このディレクトリには、以下のようなファイルが含まれます：
-- rootfsイメージ（ext2、squashfsなど）
-- カーネルイメージ（zImage）
-- デバイスツリーファイル（*.dtb）
-
-## xwaxのビルド
-
-SC1000用のxwaxをビルドするには、以下のコマンドを実行します：
-
+### Interactive Mode Development
 ```bash
-docker run -it --rm \
-  -v $(pwd):/work/SC1000 \
-  sc1000-buildroot \
-  /bin/bash -c "cd /work/SC1000/software && make CC=/work/buildroot-2018.08.4/output/host/usr/bin/arm-linux-gcc"
+# Start development shell
+docker run -it --rm -v $(pwd):/work/SC1000 sc1000-dev shell
+
+# Manual build inside container
+/work/sc1000-build.sh software  # Software only
+/work/sc1000-build.sh updater   # Updater only
 ```
 
-ビルドが成功すると、`/work/SC1000/software/xwax`にバイナリが生成されます。
+## Build Output
 
-### 対話モードでxwaxをビルドする場合
+| Component | Output Location | Description |
+|-----------|-----------------|-------------|
+| OS Image | `/work/buildroot-2018.08.4/output/images/` | zImage, rootfs, *.dtb |
+| xwax Binary | `/work/SC1000/software/xwax` | ARM executable |
+| Updater | `/work/SC1000/updater/sc.tar` | Device update package |
 
+## Performance & Notes
+
+- **Initial OS build**: 1+ hours, ~10GB required
+- **Software only**: Completes in minutes
+- **Recommended resources**: 8GB+ RAM, 15GB+ disk space
+
+## Troubleshooting
+
+**Build errors**:
 ```bash
-# コンテナを対話モードで起動
-docker run -it --rm \
-  -v $(pwd):/work/SC1000 \
-  sc1000-buildroot
+# Cross-compiler error → Build OS first
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev os
 
-# コンテナ内で以下のコマンドを実行
-cd /work/SC1000/software
-make CC=/work/buildroot-2018.08.4/output/host/usr/bin/arm-linux-gcc
+# Permission error → Environment variables auto-configured (FORCE_UNSAFE_CONFIGURE=1)
+
+# Dependency error → Execute clean build
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev clean
 ```
 
-### クリーンビルドを行う場合
-
+**Development efficiency**:
 ```bash
-docker run -it --rm \
-  -v $(pwd):/work/SC1000 \
-  sc1000-buildroot \
-  /bin/bash -c "cd /work/SC1000/software && make clean && make CC=/work/buildroot-2018.08.4/output/host/usr/bin/arm-linux-gcc"
+# Skip OS build during software development
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev software
+
+# Recreate only updater after configuration changes
+docker run --rm -v $(pwd):/work/SC1000 sc1000-dev updater
 ```
-
-### アップデーターの作成
-
-ビルドしたxwaxをSC1000デバイスにアップデートするためのパッケージを作成するには：
-
-```bash
-docker run -it --rm \
-  -v $(pwd):/work/SC1000 \
-  sc1000-buildroot \
-  /bin/bash -c "cd /work/SC1000/updater && ./buildupdater.sh"
-```
-
-### xwaxのビルドとアップデーターの作成を一度に行う場合
-
-```bash
-docker run -it --rm \
-  -v $(pwd):/work/SC1000 \
-  sc1000-buildroot \
-  /bin/bash -c "cd /work/SC1000/software && make CC=/work/buildroot-2018.08.4/output/host/usr/bin/arm-linux-gcc && cd /work/SC1000/updater && ./buildupdater.sh"
-```
-
-## 注意事項
-
-- buildrootのビルドには時間がかかる場合があります（システムのスペックによっては1時間以上）
-- ビルドプロセス中に大量のディスク容量（約10GB）が必要になる場合があります
-- Dockerコンテナを終了すると、コンテナ内のデータは失われますが、マウントしたディレクトリ（SC1000プロジェクト）のデータは保持されます
-
-## トラブルシューティング
-
-### ビルドエラーが発生する場合
-
-1. メモリ不足の場合は、Dockerに割り当てるリソースを増やしてください
-2. ビルド中にエラーが発生した場合は、エラーメッセージを確認し、必要なパッケージをインストールしてください
-3. rootユーザーに関連するエラー（`you should not run configure as root`）が発生した場合は、環境変数 `FORCE_UNSAFE_CONFIGURE=1` が設定されていることを確認してください（このDockerfileでは既に設定済みです）
-4. オーバーレイディレクトリに関するエラー（`rsync: change_dir "/work/buildroot-2018.08.4//sc1000overlay" failed: No such file or directory`）が発生した場合は、ビルドスクリプトがオーバーレイディレクトリのシンボリックリンクを正しく作成しているか確認してください（このDockerfileでは既に対応済みです）
-
-### Dockerコンテナ内でのファイルの編集
-
-Dockerコンテナ内でファイルを編集する必要がある場合は、以下のエディタが利用可能です：
-
-- vi
-- nano（インストールされていない場合は `apt-get update && apt-get install -y nano` でインストール）
