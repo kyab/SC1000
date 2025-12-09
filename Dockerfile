@@ -93,6 +93,23 @@ build_os() {\n\
     # Create overlay link in buildroot source directory\n\
     [ ! -e sc1000overlay ] && ln -sf "$SC1000_DIR/os/buildroot/sc1000overlay" sc1000overlay\n\
     \n\
+    # Copy local.mk for package overrides\n\
+    if [ -f "$SC1000_DIR/os/buildroot/local.mk" ]; then\n\
+        cp "$SC1000_DIR/os/buildroot/local.mk" local.mk\n\
+        echo "Copied local.mk for package overrides"\n\
+    fi\n\
+    # Copy patches/libglib2.mk to package/libglib2/ if it exists\n\
+    if [ -f "$SC1000_DIR/os/buildroot/patches/libglib2.mk" ]; then\n\
+        mkdir -p package/libglib2\n\
+        if [ -f package/libglib2/libglib2.mk ]; then\n\
+            echo "# Include libglib2 patches" >> package/libglib2/libglib2.mk\n\
+            cat "$SC1000_DIR/os/buildroot/patches/libglib2.mk" >> package/libglib2/libglib2.mk\n\
+        else\n\
+            cp "$SC1000_DIR/os/buildroot/patches/libglib2.mk" package/libglib2/libglib2.mk\n\
+        fi\n\
+        echo "Included patches/libglib2.mk in package/libglib2/libglib2.mk"\n\
+    fi\n\
+    \n\
     # Verify config file exists in output directory\n\
     if [ ! -f "$BUILDROOT_OUTPUT_DIR/.config" ]; then\n\
         echo "Error: .config file not found in $BUILDROOT_OUTPUT_DIR"\n\

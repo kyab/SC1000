@@ -1,0 +1,44 @@
+#! /bin/sh
+# Init script to start BlueZ-ALSA daemon
+# bluealsa requires bluetoothd to be running (D-Bus dependency)
+# If bluealsa starts before bluetoothd, it will fail to connect to D-Bus
+
+case "$1" in
+	start|"")
+		if [ "$VERBOSE" != no ]
+		then
+			printf "Starting BlueZ-ALSA daemon... "
+		fi
+		
+		# Wait for bluetoothd to be running
+		# bluealsa will fail if bluetoothd is not available via D-Bus
+		bluetoothd_ready=0
+		for i in 1 2 3 4 5; do
+			if pgrep bluetoothd > /dev/null; then
+				bluetoothd_ready=1
+				break
+			fi
+			sleep 1
+		done
+		
+		if [ $bluetoothd_ready -eq 0 ]; then
+			echo "Warning: bluetoothd not found, bluealsa may not work correctly" >&2
+		fi
+		
+		# Additional brief wait to ensure bluetoothd D-Bus interface is ready
+		sleep 1
+		
+		# Start bluealsa daemon
+		bluealsa &
+		
+		[ "$VERBOSE" != no ] && echo "done."
+		;;
+	stop)
+		killall bluealsa
+		;;
+	*)
+		echo "Usage: bluealsa {start|stop}" >&2
+		exit 1
+		;;
+esac
+

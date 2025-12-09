@@ -1,0 +1,31 @@
+#! /bin/sh
+# Init script to start Bluetooth daemon
+# DBUS is started automatically by Buildroot before this script (S01-S29)
+
+case "$1" in
+	start|"")
+		if [ "$VERBOSE" != no ]
+		then
+			printf "Starting Bluetooth daemon... "
+		fi
+		
+		# Start bluetoothd daemon
+		bluetoothd &
+		
+		# Brief wait for bluetoothd to initialize
+		sleep 1
+		
+		# Enable Bluetooth adapter
+		hciconfig hci0 up || true
+		
+		[ "$VERBOSE" != no ] && echo "done."
+		;;
+	stop)
+		killall bluetoothd
+		;;
+	*)
+		echo "Usage: bluetooth {start|stop}" >&2
+		exit 1
+		;;
+esac
+
