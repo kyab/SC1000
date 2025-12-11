@@ -1,7 +1,7 @@
 #! /bin/sh
 # Init script to start BlueZ-ALSA daemon
-# bluealsa requires bluetoothd to be running (D-Bus dependency)
-# If bluealsa starts before bluetoothd, it will fail to connect to D-Bus
+# bluealsa requires bluetoothd to be running and registered with D-Bus
+# This script starts after S30bluetooth, so bluetoothd should already be running
 
 case "$1" in
 	start|"")
@@ -10,11 +10,13 @@ case "$1" in
 			printf "Starting BlueZ-ALSA daemon... "
 		fi
 		
-		# Wait for bluetoothd to be running
-		# bluealsa will fail if bluetoothd is not available via D-Bus
+		# Wait for bluetoothd to be running and D-Bus interface ready
+		# bluealsa connects to bluetoothd via D-Bus, so we need to ensure
+		# bluetoothd is fully initialized before starting bluealsa
+		# Use pidof instead of pgrep (pgrep is not available in minimal buildroot)
 		bluetoothd_ready=0
 		for i in 1 2 3 4 5; do
-			if pgrep bluetoothd > /dev/null; then
+			if pidof bluetoothd > /dev/null 2>&1; then
 				bluetoothd_ready=1
 				break
 			fi
@@ -25,16 +27,28 @@ case "$1" in
 			echo "Warning: bluetoothd not found, bluealsa may not work correctly" >&2
 		fi
 		
-		# Additional brief wait to ensure bluetoothd D-Bus interface is ready
-		sleep 1
+		# Additional wait to ensure bluetoothd D-Bus interface is fully ready
+		# BlueZ-ALSA needs the org.bluez service to be available on D-Bus
+		sleep 2
 		
 		# Start bluealsa daemon
+		# bluealsa is in /usr/bin which is in PATH
 		bluealsa &
+		
+		# Brief wait to verify bluealsa started
+		sleep 1
+		if ! pidof bluealsa > /dev/null 2>&1; then
+			echo "Warning: bluealsa may have failed to start" >&2
+		fi
 		
 		[ "$VERBOSE" != no ] && echo "done."
 		;;
 	stop)
-		killall bluealsa
+		# Stop bluealsa
+		# Use pidof instead of pgrep (pgrep is not available in minimal buildroot)
+		if pidof bluealsa > /dev/null 2>&1; then
+			killall bluealsa
+		fi
 		;;
 	*)
 		echo "Usage: bluealsa {start|stop}" >&2
