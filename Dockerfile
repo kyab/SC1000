@@ -6,19 +6,32 @@ ARG PLATFORM=linux/arm64
 FROM --platform=${PLATFORM} ubuntu:20.04
 
 # Environment variable configuration
+# CFLAGS and CXXFLAGS to suppress format-overflow warnings in BlueZ dependencies (glib2, etc.)
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Tokyo \
     FORCE_UNSAFE_CONFIGURE=1 \
     BUILDROOT_OUTPUT_DIR=/work/buildroot-output \
-    CC_ARM=/work/buildroot-output/host/usr/bin/arm-linux-gcc
+    CC_ARM=/work/buildroot-output/host/usr/bin/arm-linux-gcc \
+    CFLAGS="-Wno-format-overflow" \
+    CXXFLAGS="-Wno-format-overflow"
 
 # Install required packages in bulk
+# Install gcc-7 and g++-7 for compatibility with buildroot 2018.08.4 and glib2
+# Install dosfstools and mtools for genimage (sdcard.img generation)
 RUN apt-get update && apt-get install -y \
     build-essential git wget cpio unzip rsync bc \
     python python3 file libncurses5-dev libssl-dev \
-    libelf-dev bison flex patch gawk cmake make gcc g++ \
+    libelf-dev bison flex patch gawk cmake make \
+    gcc-7 g++-7 \
     libasound2-dev pkg-config \
+    dosfstools mtools \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set gcc-7 and g++-7 as default compilers for buildroot compatibility
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 100 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 100 \
+    && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-7 100 \
+    && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-7 100
 
 WORKDIR /work
 
@@ -120,6 +133,10 @@ build_os() {\n\
     echo "This may take 1+ hours on first build, but will be faster on subsequent builds."\n\
     echo "Config file: $(ls -la $BUILDROOT_OUTPUT_DIR/.config)"\n\
     echo "Output directory: $BUILDROOT_OUTPUT_DIR"\n\
+    \n\
+    # Set CFLAGS to suppress format-overflow warnings in BlueZ dependencies\n\
+    export CFLAGS="-Wno-format-overflow"\n\
+    export CXXFLAGS="-Wno-format-overflow"\n\
     \n\
     # Use O= option to specify output directory explicitly\n\
     make O="$BUILDROOT_OUTPUT_DIR" -j$(nproc)\n\
