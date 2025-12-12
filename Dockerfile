@@ -18,13 +18,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Install required packages in bulk
 # Install gcc-7 and g++-7 for compatibility with buildroot 2018.08.4 and glib2
 # Install dosfstools and mtools for genimage (sdcard.img generation)
+# Install swig and python3-dev for U-Boot 2019.01+ pylibfdt support
 RUN apt-get update && apt-get install -y \
     build-essential git wget cpio unzip rsync bc \
-    python python3 file libncurses5-dev libssl-dev \
+    python python3 python3-dev file libncurses5-dev libssl-dev \
     libelf-dev bison flex patch gawk cmake make \
     gcc-7 g++-7 \
     libasound2-dev pkg-config \
     dosfstools mtools \
+    swig \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set gcc-7 and g++-7 as default compilers for buildroot compatibility
