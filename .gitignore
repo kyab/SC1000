@@ -15,3 +15,4 @@ dist
 .vscode/
 .codegpt
 .DS_Store
+os/sdcard.img

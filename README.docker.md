@@ -61,6 +61,19 @@ docker run -it --rm -v $(pwd):/work/SC1000 sc1000-dev shell
 | xwax Binary | `/work/SC1000/software/xwax` | ARM executable |
 | Updater | `/work/SC1000/updater/sc.tar` | Device update package |
 
+### Copying SD Card Image
+
+After building the OS, copy the SD card image to the repository:
+
+```bash
+# Copy sdcard.img from build output to os/ directory (using docker-compose for volume access)
+docker-compose run --rm --entrypoint sh sc1000-dev -c \
+  "cp /work/buildroot-output/images/sdcard.img /work/SC1000/os/sdcard.img"
+
+# Optionally compress the image
+gzip -k os/sdcard.img
+```
+
 ## Performance & Notes
 
 - **Initial OS build**: 1+ hours, ~10GB required
