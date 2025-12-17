@@ -1,0 +1,78 @@
+#! /bin/sh
+# Init script to start Bluetooth daemon (BlueZ 5)
+# This script starts bluetoothd after D-Bus is ready
+# D-Bus is started by Buildroot's default S30dbus script (S30)
+# This script runs at S31 to ensure D-Bus is fully initialized
+
+case "$1" in
+	start|"")
+		if [ "$VERBOSE" != no ]
+		then
+			printf "Starting Bluetooth daemon... "
+		fi
+		
+		# Wait for D-Bus to be ready before starting bluetoothd
+		# bluetoothd requires D-Bus to be running and the system bus socket to exist
+		dbus_ready=0
+		for i in 1 2 3 4 5 6 7 8 9 10; do
+			if [ -S /var/run/dbus/system_bus_socket ]; then
+				dbus_ready=1
+				break
+			fi
+			sleep 1
+		done
+		
+		if [ $dbus_ready -eq 0 ]; then
+			echo "Warning: D-Bus system socket not found, bluetoothd may fail" >&2
+		fi
+		
+		# Additional wait to ensure D-Bus service is fully ready
+		sleep 1
+		
+		# Check if bluetoothd binary exists
+		if [ ! -x /usr/libexec/bluetooth/bluetoothd ]; then
+			echo "Error: bluetoothd binary not found at /usr/libexec/bluetooth/bluetoothd" >&2
+			[ "$VERBOSE" != no ] && echo "done."
+			exit 1
+		fi
+		
+		# Start bluetoothd daemon using full path
+		# bluetoothd is located in /usr/libexec/bluetooth/ which is not in PATH
+		# Start in background - errors will be logged to syslog automatically
+		/usr/libexec/bluetooth/bluetoothd &
+		bluetoothd_pid=$!
+		
+		# Wait for bluetoothd to initialize and register with D-Bus
+		# This is important for BlueZ-ALSA which connects via D-Bus
+		sleep 2
+		
+		# Verify bluetoothd is running
+		# Use pidof instead of pgrep (pgrep is not available in minimal buildroot)
+		if ! pidof bluetoothd > /dev/null 2>&1; then
+			echo "Warning: bluetoothd failed to start (PID $bluetoothd_pid exited)" >&2
+			echo "Note: This may be normal if no Bluetooth hardware is present" >&2
+			# Check syslog for error messages
+			if command -v logger > /dev/null 2>&1; then
+				logger -t bluetoothd "bluetoothd failed to start - check for hardware"
+			fi
+		fi
+		
+		# Note: In BlueZ 5, bluetoothd automatically enables the adapter
+		# when it starts, so hciconfig is not needed
+		# If manual control is needed, use D-Bus commands or btmgmt/bluetoothctl
+		
+		[ "$VERBOSE" != no ] && echo "done."
+		;;
+	stop)
+		# Stop bluetoothd
+		# Use pidof instead of pgrep (pgrep is not available in minimal buildroot)
+		if pidof bluetoothd > /dev/null 2>&1; then
+			killall bluetoothd
+		fi
+		;;
+	*)
+		echo "Usage: bluetooth {start|stop}" >&2
+		exit 1
+		;;
+esac
+

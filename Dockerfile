@@ -124,6 +124,12 @@ build_os() {\n\
         fi\n\
         echo "Included patches/libglib2.mk in package/libglib2/libglib2.mk"\n\
     fi\n\
+    # Copy kernel config fragment for Bluetooth support (USB Bluetooth dongles)\n\
+    if [ -f "$SC1000_DIR/os/buildroot/linux_bt.config" ]; then\n\
+        mkdir -p board/olimex/a13_olinuxino\n\
+        cp "$SC1000_DIR/os/buildroot/linux_bt.config" board/olimex/a13_olinuxino/linux_bt.config\n\
+        echo "Copied kernel Bluetooth config fragment for USB dongles"\n\
+    fi\n\
     \n\
     # Verify config file exists in output directory\n\
     if [ ! -f "$BUILDROOT_OUTPUT_DIR/.config" ]; then\n\
